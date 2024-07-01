@@ -101,7 +101,28 @@ class JobService
         $experienceMatch = $this->calculateExperienceMatch($candidateData['exp'] ?? null, $job["exp_id"]);
         $fieldMatch = $this->calculateFieldMatch($candidateData['category'] ?? null, $job["category_id"]);
 
-        $totalMatchScore = ($locationMatch + $salaryMatch + $experienceMatch + $fieldMatch) / 4;
+        $totalFactors = 4;
+        if ($locationMatch === null) {
+            $totalFactors--;
+            $locationMatch = 0;
+        }
+        if ($salaryMatch === null) {
+            $totalFactors--;
+            $salaryMatch = 0;
+        }
+        if ($experienceMatch === null) {
+            $totalFactors--;
+            $experienceMatch = 0;
+        }
+        if ($fieldMatch === null) {
+            $totalFactors--;
+            $fieldMatch = 0;
+        }
+        if($totalFactors > 0 ) {
+            $totalMatchScore = ($locationMatch + $salaryMatch + $experienceMatch + $fieldMatch) / $totalFactors;
+        } else {
+            $totalMatchScore = 1;
+        }
 
         return $totalMatchScore;
     }
@@ -109,17 +130,17 @@ class JobService
     private function calculateLocationMatch($candidateLocation, $jobLocation)
     {
         if ($candidateLocation === null) {
-            return 1;
+            return null;
         }
 
         $jobLocations = array_map('intval', explode(',', $jobLocation));
         return in_array($candidateLocation, $jobLocations) ? 1 : 0;
     }
 
-    private function calculateSalaryMatch($candidateSalaryRange, $jobSalary, $jobMaxSalary = null)
+    private function calculateSalaryMatch($candidateSalaryRange, $jobSalary, $jobMaxSalary)
     {
         if ($candidateSalaryRange === null) {
-            return 1;
+            return null;
         }
 
         $salaryRanges = [
@@ -134,7 +155,7 @@ class JobService
         ];
 
         $range1 = $salaryRanges[$candidateSalaryRange];
-        $range2 = $jobMaxSalary ? [$jobSalary, $jobMaxSalary] : [$jobSalary, $jobSalary];
+        $range2 = $jobMaxSalary!==null ? [$jobSalary, $jobMaxSalary] : [$jobSalary, $jobSalary];
 
         return $this->calculateOverlap($range1, $range2);
     }
@@ -142,7 +163,7 @@ class JobService
     private function calculateExperienceMatch($candidateExperience, $jobExperienceRequired)
     {
         if ($candidateExperience === null) {
-            return 1;
+            return null;
         }
 
         $maxDifference = abs($candidateExperience - $jobExperienceRequired);
@@ -154,7 +175,7 @@ class JobService
     private function calculateFieldMatch($candidateDesiredFields, $jobField)
     {
         if ($candidateDesiredFields === null) {
-            return 1;
+            return null;
         }
 
         $desiredFields = explode(',', $candidateDesiredFields);
@@ -176,18 +197,28 @@ class JobService
         if ($start < $end) {
             // Tính toán sự trùng lặp
             $overlap = $end - $start;
+            if ($range2[0] > $range1[0] && $range2[1] < $range1[1]) {
+                return 1;
+            }
             $maxRange = max($range1[1] - $range1[0], $range2[1] - $range2[0]);
             return $overlap / $maxRange;
+
         } else {
-            // Không có sự trùng lặp, tính khoảng cách giữa các khoảng
+            //tính khoảng cách giữa các khoảng
             $distance = max($range1[0], $range2[0]) - min($range1[1], $range2[1]);
+            // TH đặc biệt khi mức lương cụ thể ở trong khoảng lương mong muốn của ứng viên
+            if(($range2[0] === $range2[1] && $range2[0] === $range1[0]) || ($range2[0] === $range2[1] && $range2[0] === $range1[1]
+            || $range2[0] === $range2[1] && $range2[0] > $range1[0] && $range2[0] < $range1[1]
+            )) {
+                return 1;
+            }
+
             $maxRangeLength = max($range1[1] - $range1[0], $range2[1] - $range2[0]);
-
             // Tính điểm tương đồng dựa trên hàm Gaussian
-            $sigma = $maxRangeLength / 2;
-            $similarityScore = exp(-pow($distance, 2) / (2 * pow($sigma, 2)));
+            $sigma = 5000000;
+            $similarityScore = exp(-pow($distance, 2) / (2 * pow($sigma, 2))) * ($sigma/$maxRangeLength);
 
-            return $similarityScore;
+            return $similarityScore/2;  // không trùng lặp thì tối đa chỉ phù hợp 50% hoặc ít hơn
         }
     }
 
@@ -200,7 +231,8 @@ class JobService
         //  $jobs = Job::all();
          $jobs = Job::selectRaw( '* , DATEDIFF(`jobs`.`deadline`, NOW()) as `remaining_date`')
             ->where('status', 1)->whereRaw( 'deadline >= NOW()')
-            ->inRandomOrder()->with("company")->with("city")->take(40)->get();
+            ->inRandomOrder()
+            ->with("company")->with("city")->take(40)->get();
 
          // Tính toán mức độ phù hợp của các công việc với ứng viên bằng fuzzy logic
          $recommendedJobs = [];
@@ -209,14 +241,14 @@ class JobService
              $jobArray = $job->toArray();
              $jobArray['suitability_score'] = $suitabilityScore;
              $recommendedJobs[] = $jobArray;
-         }
-         // Sắp xếp danh sách công việc theo mức độ phù hợp giảm dần
-         usort($recommendedJobs, function ($a, $b) {
-             if ($a['suitability_score'] === $b['suitability_score']) {
-                 return 0;
-             }
-             return ($a['suitability_score'] > $b['suitability_score']) ? -1 : 1;
-         });
+            }
+            // Sắp xếp danh sách công việc theo mức độ phù hợp giảm dần
+            usort($recommendedJobs, function ($a, $b) {
+                if ($a['suitability_score'] === $b['suitability_score']) {
+                    return 0;
+                }
+                return ($a['suitability_score'] > $b['suitability_score']) ? -1 : 1;
+            });
          return $recommendedJobs;
     }
 
