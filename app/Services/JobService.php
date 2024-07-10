@@ -51,7 +51,8 @@ class JobService
         return $jobs = Job::selectRaw( '* , DATEDIFF(`jobs`.`deadline`, NOW()) as `remaining_date`')
         ->where(["status" => 1])
         ->whereRaw( 'deadline >= NOW()')
-        ->with('company','category','city','position')->withCount('apply')->get();
+        ->inRandomOrder()
+        ->with('company','category','city','position')->withCount('apply')->take(40)->get();
     }
 
     public function getCompanyJobs($company_id, $request)
