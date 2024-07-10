@@ -36,7 +36,7 @@ class JobRequest extends FormRequest
             'city_id'      => 'required',
             'deadline'     => 'required|date|after:tomorrow',
             'right'        => 'required',
-            'exp'          => 'required',
+            'exp_id'          => 'required',
             'address'      => 'required',
             'max_salary'   => '',
         ];
@@ -55,7 +55,7 @@ class JobRequest extends FormRequest
             'category_id.required'  => 'Tên không được phép để trống',
             'city_id.required'      => 'Tên không được phép để trống',
             'right.required'        => 'Tên không được phép để trống',
-            'exp.required'        => 'Tên không được phép để trống',
+            'exp_id.required'        => 'Tên không được phép để trống',
             'address.required'        => 'Tên không được phép để trống',
             'deadline.required'     => 'Deadline ứng tuyển không được phép để trống',
             'deadline.date'         => 'Tên không được phép để trống',
